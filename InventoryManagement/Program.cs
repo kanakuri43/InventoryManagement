@@ -498,7 +498,7 @@ namespace InventoryManagement
                 // 一時XPSファイルを削除
                 if (File.Exists(xpsPath))
                 {
-                    //File.Delete(xpsPath);
+                    File.Delete(xpsPath);
                 }
 
                 Console.WriteLine($"✓ XAML使用PDF作成完了: {pdfPath}");
