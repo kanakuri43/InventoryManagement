@@ -2,6 +2,7 @@
 using System.Data;
 using System.Data.SQLite;
 using System.IO;
+using System.Text;
 
 namespace InventoryManagement
 {
@@ -84,7 +85,8 @@ namespace InventoryManagement
                 "3. FAX送信",
                 "4. 入荷入力",
                 "5. 仕入先管理",
-                "6. 終了"
+                "6. データ出力",
+                "7. 終了"
             };
 
             while (true)
@@ -120,7 +122,7 @@ namespace InventoryManagement
                         break;
                     case ConsoleKey.Enter:
                         ExecuteMenuOption(selectedIndex);
-                        if (selectedIndex == 5) return; // 終了
+                        if (selectedIndex == 6) return; // 終了
                         break;
                 }
             }
@@ -146,6 +148,9 @@ namespace InventoryManagement
                     SupplierManagement();
                     break;
                 case 5:
+                    ExportAllTablesToCSV();
+                    break;
+                case 6:
                     Console.WriteLine("アプリケーションを終了します...");
                     _connection?.Close();
                     break;
@@ -161,10 +166,10 @@ namespace InventoryManagement
                 Console.ForegroundColor = ConsoleColor.Black;
                 Console.WriteLine("=== 在庫入力 ===\n");
                 Console.ResetColor();
-                Console.WriteLine("バーコードを入力してください（終了: 'exit'）:");
+                Console.WriteLine("バーコードを入力してください（終了: 'x'）:");
 
                 string barcode = Console.ReadLine();
-                if (string.IsNullOrEmpty(barcode) || barcode.ToLower() == "exit")
+                if (string.IsNullOrEmpty(barcode) || barcode.ToLower() == "x")
                     break;
 
                 var product = GetProductByBarcode(barcode);
@@ -182,7 +187,7 @@ namespace InventoryManagement
 
                 if (int.TryParse(Console.ReadLine(), out int quantity))
                 {
-                    Console.WriteLine($"在庫を {quantity} 個追加しますか？ (Y/N)");
+                    Console.WriteLine($"在庫を更新します {quantity}  (Y/N)");
                     var confirm = Console.ReadKey(true);
 
                     if (confirm.Key == ConsoleKey.Y)
@@ -214,10 +219,10 @@ namespace InventoryManagement
                 Console.ForegroundColor = ConsoleColor.Black;
                 Console.WriteLine("=== 商品管理 ===\n");
                 Console.ResetColor();
-                Console.WriteLine("バーコードを入力してください（終了: 'exit'）:");
+                Console.WriteLine("バーコードを入力してください（終了: 'x'）:");
 
                 string barcode = Console.ReadLine();
-                if (string.IsNullOrEmpty(barcode) || barcode.ToLower() == "exit")
+                if (string.IsNullOrEmpty(barcode) || barcode.ToLower() == "x")
                     break;
 
                 var product = GetProductByBarcode(barcode);
@@ -300,35 +305,180 @@ namespace InventoryManagement
 
         static void SupplierManagement()
         {
-            Console.Clear();
-            Console.BackgroundColor = ConsoleColor.Yellow;
-            Console.ForegroundColor = ConsoleColor.Black;
-            Console.WriteLine("=== 仕入先管理 ===\n");
-            Console.ResetColor();
-
-            Console.WriteLine("仕入先名を入力してください:");
-            string name = Console.ReadLine();
-
-            Console.WriteLine("連絡先を入力してください:");
-            string contact = Console.ReadLine();
-
-            Console.WriteLine("登録しますか？ (Y/N)");
-            var confirm = Console.ReadKey(true);
-
-            if (confirm.Key == ConsoleKey.Y)
+            while (true)
             {
-                CreateSupplier(name, contact);
-                Console.WriteLine("仕入先を登録しました。");
-            }
-            else
-            {
-                Console.WriteLine("キャンセルしました。");
-            }
+                Console.Clear();
+                Console.BackgroundColor = ConsoleColor.Yellow;
+                Console.ForegroundColor = ConsoleColor.Black;
+                Console.WriteLine("=== 仕入先管理 ===\n");
+                Console.ResetColor();
+                Console.WriteLine("仕入先コードを入力してください（終了: 'x'）:");
 
-            Console.WriteLine("何かキーを押してください...");
-            Console.ReadKey();
+                string input = Console.ReadLine();
+                if (string.IsNullOrEmpty(input) || input.ToLower() == "x")
+                    break;
+
+                if (!int.TryParse(input, out int supplierId))
+                {
+                    Console.WriteLine("無効な数値です。");
+                    continue;
+                }
+
+
+                var suplier = GetSupplierById(supplierId);
+
+                Console.WriteLine("仕入先名を入力してください:");
+                string supplierName = Console.ReadLine();
+
+                Console.WriteLine("FAX番号を入力してください（ハイフンなし）:");
+                if (!int.TryParse(Console.ReadLine(), out int fax))
+                {
+                    Console.WriteLine("無効な数値です。");
+                    continue;
+                }
+
+                Console.WriteLine("確定しますか？ (Y/N)");
+                var confirm = Console.ReadKey(true);
+
+                if (confirm.Key == ConsoleKey.Y)
+                {
+                    if (suplier == null)
+                    {
+                        CreateSupplier(supplierId, supplierName, fax);
+                        Console.WriteLine("商品を新規登録しました。");
+                    }
+                    else
+                    {
+                        UpdateSupplier(suplier.Id, supplierName, fax);
+                        Console.WriteLine("商品情報を更新しました。");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("キャンセルしました。");
+                }
+
+                Console.WriteLine("何かキーを押してください...");
+                Console.ReadKey();
+            }
         }
 
+        static void ExportAllTablesToCSV()
+        {
+            try
+            {
+                // 出力ディレクトリを作成
+                string outputDir = "csv_exports";
+                if (!Directory.Exists(outputDir))
+                {
+                    Directory.CreateDirectory(outputDir);
+                }
+
+                // 全テーブル名を取得
+                List<string> tableNames = GetAllTableNames();
+
+                if (tableNames.Count == 0)
+                {
+                    Console.WriteLine("テーブルが見つかりませんでした。");
+                    return;
+                }
+
+                Console.WriteLine($"見つかったテーブル数: {tableNames.Count}");
+
+                int exportedCount = 0;
+                foreach (string tableName in tableNames)
+                {
+                    try
+                    {
+                        string csvFilePath = Path.Combine(outputDir, $"{tableName}.csv");
+                        ExportTableToCSV(tableName, csvFilePath);
+                        Console.WriteLine($"✓ {tableName} → {csvFilePath}");
+                        exportedCount++;
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"✗ {tableName} のエクスポートに失敗: {ex.Message}");
+                    }
+                }
+
+                Console.WriteLine($"\n完了: {exportedCount}/{tableNames.Count} テーブルをエクスポートしました。");
+                Console.WriteLine("何かキーを押してください...");
+                Console.ReadKey();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"エラー: {ex.Message}");
+            }
+        }
+
+        static List<string> GetAllTableNames()
+        {
+            List<string> tableNames = new List<string>();
+
+            string sql = @"
+            SELECT name FROM sqlite_master 
+            WHERE type='table' 
+            AND name NOT LIKE 'sqlite_%'
+            ORDER BY name";
+
+            using (SQLiteCommand command = new SQLiteCommand(sql, _connection))
+            using (SQLiteDataReader reader = command.ExecuteReader())
+            {
+                while (reader.Read())
+                {
+                    tableNames.Add(reader["name"].ToString());
+                }
+            }
+
+            return tableNames;
+        }
+        static void ExportTableToCSV(string tableName, string csvFilePath)
+        {
+            using (StreamWriter writer = new StreamWriter(csvFilePath, false, Encoding.UTF8))
+            {
+                string sql = $"SELECT * FROM [{tableName}]";
+
+                using (SQLiteCommand command = new SQLiteCommand(sql, _connection))
+                using (SQLiteDataReader reader = command.ExecuteReader())
+                {
+                    // ヘッダー行を書き込み
+                    List<string> columnNames = new List<string>();
+                    for (int i = 0; i < reader.FieldCount; i++)
+                    {
+                        columnNames.Add(reader.GetName(i));
+                    }
+                    writer.WriteLine(string.Join(",", columnNames.ConvertAll(EscapeCsvField)));
+
+                    // データ行を書き込み
+                    while (reader.Read())
+                    {
+                        List<string> values = new List<string>();
+                        for (int i = 0; i < reader.FieldCount; i++)
+                        {
+                            object value = reader[i];
+                            string stringValue = value == DBNull.Value ? "" : value.ToString();
+                            values.Add(EscapeCsvField(stringValue));
+                        }
+                        writer.WriteLine(string.Join(",", values));
+                    }
+                }
+            }
+        }
+        static string EscapeCsvField(string field)
+        {
+            if (string.IsNullOrEmpty(field))
+                return "";
+
+            // カンマ、改行、ダブルクォートが含まれている場合はダブルクォートで囲む
+            if (field.Contains(",") || field.Contains("\n") || field.Contains("\r") || field.Contains("\""))
+            {
+                // ダブルクォートをエスケープ（""に変換）
+                field = field.Replace("\"", "\"\"");
+                return $"\"{field}\"";
+            }
+
+            return field;
+        }
         static Product GetProductByBarcode(string barcode)
         {
             string query = "SELECT id, barcode, name, current_stock, minimum_stock, supplier_id FROM products WHERE barcode = @barcode";
@@ -354,6 +504,28 @@ namespace InventoryManagement
             return null;
         }
 
+        static Supplier GetSupplierById(int suplierId)
+        {
+            string query = "SELECT * FROM suppliers WHERE id = @id";
+            using (var command = new SQLiteCommand(query, _connection))
+            {
+                command.Parameters.AddWithValue("@id", suplierId);
+                using (var reader = command.ExecuteReader())
+                {
+                    if (reader.Read())
+                    {
+                        return new Supplier
+                        {
+                            Id = reader.GetInt32("id"),
+                            Name = reader.GetString("name"),
+                            Contact = reader.GetString("contact")
+                        };
+                    }
+                }
+            }
+            return null;
+        }
+
         static void UpdateStock(int productId, int quantityChange, string operationType)
         {
             using (var transaction = _connection.BeginTransaction())
@@ -361,7 +533,7 @@ namespace InventoryManagement
                 try
                 {
                     // 在庫数更新
-                    string updateStock = "UPDATE products SET current_stock = current_stock + @quantity WHERE id = @id";
+                    string updateStock = "UPDATE products SET current_stock = @quantity WHERE id = @id";
                     using (var command = new SQLiteCommand(updateStock, _connection, transaction))
                     {
                         command.Parameters.AddWithValue("@quantity", quantityChange);
@@ -415,13 +587,24 @@ namespace InventoryManagement
             }
         }
 
-        static void CreateSupplier(string name, string contact)
+        static void CreateSupplier(int id, string name, int fax)
         {
             string query = "INSERT INTO suppliers (name, contact) VALUES (@name, @contact)";
             using (var command = new SQLiteCommand(query, _connection))
             {
                 command.Parameters.AddWithValue("@name", name);
-                command.Parameters.AddWithValue("@contact", contact);
+                command.Parameters.AddWithValue("@contact", fax);
+                command.ExecuteNonQuery();
+            }
+        }
+        static void UpdateSupplier(int id, string name, int fax)
+        {
+            string query = "UPDATE suppliers SET name = @name, minimum_stock = @minimumStock WHERE id = @id";
+            using (var command = new SQLiteCommand(query, _connection))
+            {
+                command.Parameters.AddWithValue("@name", name);
+                command.Parameters.AddWithValue("@contact", fax);
+                command.Parameters.AddWithValue("@id", id);
                 command.ExecuteNonQuery();
             }
         }
