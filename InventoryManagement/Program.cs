@@ -23,6 +23,8 @@ namespace InventoryManagement
         static void Main(string[] args)
         {
             Console.OutputEncoding = System.Text.Encoding.UTF8;
+            System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+
             InitializeDatabase();
             ShowMainMenu();
         }
@@ -105,6 +107,7 @@ namespace InventoryManagement
                 Console.ForegroundColor = ConsoleColor.Black;
                 Console.WriteLine("=== 在庫管理システム ===\n");
                 Console.ResetColor();
+
 
                 for (int i = 0; i < menuItems.Length; i++)
                 {
@@ -490,7 +493,7 @@ namespace InventoryManagement
                 }
 
                 // XPSをPDFに変換
-                //PdfSharp.Xps.XpsConverter.Convert(xpsPath, pdfPath, 0);
+                PdfSharp.Xps.XpsConverter.Convert(xpsPath, pdfPath, 0);
 
                 // 一時XPSファイルを削除
                 if (File.Exists(xpsPath))
