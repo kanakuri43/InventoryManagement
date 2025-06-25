@@ -7,6 +7,26 @@
              mc:Ignorable="d" 
              d:DesignHeight="800" d:DesignWidth="1100">
     <Grid Background="White">
-        <TextBlock Text="発注書"/>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="50"/>
+            <RowDefinition Height="50"/>
+            <RowDefinition Height="50"/>
+            <RowDefinition Height="50"/>
+            <RowDefinition Height="50"/>
+            <RowDefinition Height="50"/>
+            <RowDefinition/>
+            <RowDefinition/>
+        </Grid.RowDefinitions>
+        <TextBlock Grid.Row="0" 
+                   Text="発注書"/>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal">
+            <TextBlock Text="{Binding Supplier.Name}"/>
+            <TextBlock Text=" 御中"/>
+        </StackPanel>
+        <StackPanel Grid.Row="3" Orientation="Horizontal">
+            <TextBlock Text="発注日 "/>
+            <TextBlock Text="{Binding OrderDate}"/>
+        </StackPanel>
     </Grid>
 </UserControl>

@@ -181,7 +181,7 @@ namespace InventoryManagement
                 Console.ForegroundColor = ConsoleColor.Black;
                 Console.WriteLine("=== 在庫入力 ===\n");
                 Console.ResetColor();
-                Console.WriteLine("バーコードを入力してください（終了: 'x'）:");
+                Console.WriteLine("バーコードを入力してください（x: 戻る）:");
 
                 string barcode = Console.ReadLine();
                 if (string.IsNullOrEmpty(barcode) || barcode.ToLower() == "x")
@@ -235,7 +235,7 @@ namespace InventoryManagement
                 Console.WriteLine("=== 入荷入力 ===\n");
                 Console.ResetColor();
 
-                Console.WriteLine("バーコードを入力してください（終了: 'x'）:");
+                Console.WriteLine("バーコードを入力してください（x: 戻る）:");
 
                 string barcode = Console.ReadLine();
                 if (string.IsNullOrEmpty(barcode) || barcode.ToLower() == "x")
@@ -282,7 +282,7 @@ namespace InventoryManagement
                 Console.ForegroundColor = ConsoleColor.Black;
                 Console.WriteLine("=== 商品管理 ===\n");
                 Console.ResetColor();
-                Console.WriteLine("バーコードを入力してください（終了: 'x'）:");
+                Console.WriteLine("バーコードを入力してください（x: 戻る）:");
 
                 string barcode = Console.ReadLine();
                 if (string.IsNullOrEmpty(barcode) || barcode.ToLower() == "x")
@@ -453,12 +453,11 @@ namespace InventoryManagement
                 OrderSlip orderSlip = new OrderSlip();
 
                 // OrderSlipのデータコンテキストを設定（必要に応じて）
-                //orderSlip.DataContext = new OrderSlipViewModel
-                //{
-                //    Supplier = supplier,
-                //    Products = products,
-                //    OrderDate = DateTime.Now
-                //};
+                orderSlip.DataContext = new OrderSlipViewModel
+                {
+                    Supplier = supplier,
+                    OrderDate = DateTime.Now
+                };
 
                 // FixedPageを作成
                 System.Windows.Documents.FixedPage fixedPage = new System.Windows.Documents.FixedPage();
@@ -519,7 +518,7 @@ namespace InventoryManagement
                 Console.ForegroundColor = ConsoleColor.Black;
                 Console.WriteLine("=== 仕入先管理 ===\n");
                 Console.ResetColor();
-                Console.WriteLine("仕入先コードを入力してください（終了: 'x'）:");
+                Console.WriteLine("仕入先コードを入力してください（x: 戻る）:");
 
                 string input = Console.ReadLine();
                 if (string.IsNullOrEmpty(input) || input.ToLower() == "x")

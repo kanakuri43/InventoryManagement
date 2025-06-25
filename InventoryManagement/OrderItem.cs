@@ -10,8 +10,6 @@ namespace InventoryManagement
     {
         public string ProductName { get; set; }
         public string Barcode { get; set; }
-        public int CurrentStock { get; set; }
-        public int MinimumStock { get; set; }
         public int OrderQuantity { get; set; }
     }
 }

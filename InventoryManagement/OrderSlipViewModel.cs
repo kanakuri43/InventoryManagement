@@ -9,7 +9,7 @@ namespace InventoryManagement
     public class OrderSlipViewModel
     {
         public Supplier Supplier { get; set; }
-        public List<Product> Products { get; set; }
         public DateTime OrderDate { get; set; }
+        public List<OrderItem> OrderItems { get; set; }
     }
 }
