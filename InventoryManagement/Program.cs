@@ -7,7 +7,7 @@ namespace InventoryManagement
 {
     class Program
     {
-        private static SQLiteConnection connection;
+        private static SQLiteConnection _connection;
         private const string dbPath = "inventory.db";
 
         static void Main(string[] args)
@@ -24,8 +24,8 @@ namespace InventoryManagement
                 SQLiteConnection.CreateFile(dbPath);
             }
 
-            connection = new SQLiteConnection($"Data Source={dbPath};Version=3;");
-            connection.Open();
+            _connection = new SQLiteConnection($"Data Source={dbPath};Version=3;");
+            _connection.Open();
 
             // テーブル作成
             string createTables = @"
@@ -69,7 +69,7 @@ namespace InventoryManagement
                 );
             ";
 
-            using (var command = new SQLiteCommand(createTables, connection))
+            using (var command = new SQLiteCommand(createTables, _connection))
             {
                 command.ExecuteNonQuery();
             }
@@ -90,7 +90,10 @@ namespace InventoryManagement
             while (true)
             {
                 Console.Clear();
+                Console.BackgroundColor = ConsoleColor.Yellow;
+                Console.ForegroundColor = ConsoleColor.Black;
                 Console.WriteLine("=== 在庫管理システム ===\n");
+                Console.ResetColor();
 
                 for (int i = 0; i < menuItems.Length; i++)
                 {
@@ -144,7 +147,7 @@ namespace InventoryManagement
                     break;
                 case 5:
                     Console.WriteLine("アプリケーションを終了します...");
-                    connection?.Close();
+                    _connection?.Close();
                     break;
             }
         }
@@ -154,7 +157,10 @@ namespace InventoryManagement
             while (true)
             {
                 Console.Clear();
+                Console.BackgroundColor = ConsoleColor.Yellow;
+                Console.ForegroundColor = ConsoleColor.Black;
                 Console.WriteLine("=== 在庫入力 ===\n");
+                Console.ResetColor();
                 Console.WriteLine("バーコードを入力してください（終了: 'exit'）:");
 
                 string barcode = Console.ReadLine();
@@ -204,7 +210,10 @@ namespace InventoryManagement
             while (true)
             {
                 Console.Clear();
+                Console.BackgroundColor = ConsoleColor.Yellow;
+                Console.ForegroundColor = ConsoleColor.Black;
                 Console.WriteLine("=== 商品管理 ===\n");
+                Console.ResetColor();
                 Console.WriteLine("バーコードを入力してください（終了: 'exit'）:");
 
                 string barcode = Console.ReadLine();
@@ -252,7 +261,10 @@ namespace InventoryManagement
         static void FaxSend()
         {
             Console.Clear();
+            Console.BackgroundColor = ConsoleColor.Yellow;
+            Console.ForegroundColor = ConsoleColor.Black;
             Console.WriteLine("=== FAX送信 ===\n");
+            Console.ResetColor();
 
             // FAX送信処理をここに実装
             SendFax();
@@ -264,7 +276,10 @@ namespace InventoryManagement
         static void ReceivingInput()
         {
             Console.Clear();
+            Console.BackgroundColor = ConsoleColor.Yellow;
+            Console.ForegroundColor = ConsoleColor.Black;
             Console.WriteLine("=== 入荷入力 ===\n");
+            Console.ResetColor();
             Console.WriteLine("入荷処理を実行しますか？ (Y/N)");
 
             var confirm = Console.ReadKey(true);
@@ -286,7 +301,10 @@ namespace InventoryManagement
         static void SupplierManagement()
         {
             Console.Clear();
+            Console.BackgroundColor = ConsoleColor.Yellow;
+            Console.ForegroundColor = ConsoleColor.Black;
             Console.WriteLine("=== 仕入先管理 ===\n");
+            Console.ResetColor();
 
             Console.WriteLine("仕入先名を入力してください:");
             string name = Console.ReadLine();
@@ -314,7 +332,7 @@ namespace InventoryManagement
         static Product GetProductByBarcode(string barcode)
         {
             string query = "SELECT id, barcode, name, current_stock, minimum_stock, supplier_id FROM products WHERE barcode = @barcode";
-            using (var command = new SQLiteCommand(query, connection))
+            using (var command = new SQLiteCommand(query, _connection))
             {
                 command.Parameters.AddWithValue("@barcode", barcode);
                 using (var reader = command.ExecuteReader())
@@ -338,13 +356,13 @@ namespace InventoryManagement
 
         static void UpdateStock(int productId, int quantityChange, string operationType)
         {
-            using (var transaction = connection.BeginTransaction())
+            using (var transaction = _connection.BeginTransaction())
             {
                 try
                 {
                     // 在庫数更新
                     string updateStock = "UPDATE products SET current_stock = current_stock + @quantity WHERE id = @id";
-                    using (var command = new SQLiteCommand(updateStock, connection, transaction))
+                    using (var command = new SQLiteCommand(updateStock, _connection, transaction))
                     {
                         command.Parameters.AddWithValue("@quantity", quantityChange);
                         command.Parameters.AddWithValue("@id", productId);
@@ -354,7 +372,7 @@ namespace InventoryManagement
                     // 履歴記録
                     string insertHistory = @"INSERT INTO stock_history (product_id, quantity_change, operation_type) 
                                            VALUES (@productId, @quantity, @operation)";
-                    using (var command = new SQLiteCommand(insertHistory, connection, transaction))
+                    using (var command = new SQLiteCommand(insertHistory, _connection, transaction))
                     {
                         command.Parameters.AddWithValue("@productId", productId);
                         command.Parameters.AddWithValue("@quantity", quantityChange);
@@ -376,7 +394,7 @@ namespace InventoryManagement
         {
             string query = @"INSERT INTO products (barcode, name, minimum_stock) 
                            VALUES (@barcode, @name, @minimumStock)";
-            using (var command = new SQLiteCommand(query, connection))
+            using (var command = new SQLiteCommand(query, _connection))
             {
                 command.Parameters.AddWithValue("@barcode", barcode);
                 command.Parameters.AddWithValue("@name", name);
@@ -388,7 +406,7 @@ namespace InventoryManagement
         static void UpdateProduct(int id, string name, int minimumStock)
         {
             string query = "UPDATE products SET name = @name, minimum_stock = @minimumStock WHERE id = @id";
-            using (var command = new SQLiteCommand(query, connection))
+            using (var command = new SQLiteCommand(query, _connection))
             {
                 command.Parameters.AddWithValue("@name", name);
                 command.Parameters.AddWithValue("@minimumStock", minimumStock);
@@ -400,7 +418,7 @@ namespace InventoryManagement
         static void CreateSupplier(string name, string contact)
         {
             string query = "INSERT INTO suppliers (name, contact) VALUES (@name, @contact)";
-            using (var command = new SQLiteCommand(query, connection))
+            using (var command = new SQLiteCommand(query, _connection))
             {
                 command.Parameters.AddWithValue("@name", name);
                 command.Parameters.AddWithValue("@contact", contact);
