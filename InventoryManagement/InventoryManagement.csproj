@@ -11,6 +11,7 @@
 	</PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="PdfSharp.Xps" Version="1.0.0" />
     <PackageReference Include="System.Data.SQLite.Core" Version="1.0.119" />
   </ItemGroup>
 

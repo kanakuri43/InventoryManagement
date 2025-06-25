@@ -2,7 +2,15 @@
 using System.Data;
 using System.Data.SQLite;
 using System.IO;
+using System.IO.Packaging;
 using System.Text;
+using System.Windows.Documents;
+using System.Windows.Markup;
+using System.Windows.Xps;
+using System.Windows.Xps.Packaging;
+using System.Windows.Controls;
+using PdfSharp.Pdf;
+using PdfSharp.Drawing;
 
 namespace InventoryManagement
 {
@@ -11,6 +19,7 @@ namespace InventoryManagement
         private static SQLiteConnection _connection;
         private const string dbPath = "inventory.db";
 
+        [STAThread]
         static void Main(string[] args)
         {
             Console.OutputEncoding = System.Text.Encoding.UTF8;
@@ -138,7 +147,7 @@ namespace InventoryManagement
                     break;
                 case 1:
                     // FAX送信
-                    FaxSend();
+                    SendFax();
                     break;
                 case 2:
                     // 入荷入力
@@ -317,7 +326,7 @@ namespace InventoryManagement
             }
         }
 
-        static void FaxSend()
+        static void SendFax()
         {
             Console.Clear();
             Console.BackgroundColor = ConsoleColor.Yellow;
@@ -325,11 +334,179 @@ namespace InventoryManagement
             Console.WriteLine("=== FAX送信 ===\n");
             Console.ResetColor();
 
-            // FAX送信処理をここに実装
-            SendFax();
+            try
+            {
+                // 最低在庫数を下回った商品を取得
+                var lowStockProducts = GetLowStockProducts();
+
+                if (lowStockProducts.Count == 0)
+                {
+                    Console.WriteLine("発注が必要な商品はありません。");
+                    Console.WriteLine("何かキーを押してください...");
+                    Console.ReadKey();
+                    return;
+                }
+                Console.WriteLine($"発注が必要な商品が {lowStockProducts.Count} 件見つかりました。");
+                Console.WriteLine("\n発注対象商品:");
+                foreach (var product in lowStockProducts)
+                {
+                    var supplier = GetSupplierById(product.SupplierId ?? 0);
+                    string supplierName = supplier?.Name ?? "未設定";
+                    Console.WriteLine($"- {product.Name} (現在:{product.CurrentStock}, 最低:{product.MinimumStock}) - 仕入先: {supplierName}");
+                }
+
+                Console.WriteLine("\nFAX送信を実行しますか？ (Y/N)");
+                var confirm = Console.ReadKey(true);
+
+                if (confirm.Key != ConsoleKey.Y)
+                {
+                    Console.WriteLine("キャンセルしました。");
+                    Console.WriteLine("何かキーを押してください...");
+                    Console.ReadKey();
+                    return;
+                }
+
+                // 仕入先ごとにグループ化して発注書を作成
+                var supplierGroups = lowStockProducts
+                    .Where(p => p.SupplierId.HasValue)
+                    .GroupBy(p => p.SupplierId.Value)
+                    .ToList();
+
+                int successCount = 0;
+                int totalCount = supplierGroups.Count;
+
+                foreach (var group in supplierGroups)
+                {
+                    var supplier = GetSupplierById(group.Key);
+                    if (supplier == null) continue;
+
+                    try
+                    {
+                        // PDF発注書作成
+                        string pdfPath = CreateOrderPDF(supplier, group.ToList());
+
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"✗ {supplier.Name} への発注処理でエラー: {ex.Message}");
+                    }
+                }
+
+                Console.WriteLine($"\n完了: {successCount}/{totalCount} 件の発注書を送信しました。");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"FAX送信処理でエラーが発生しました: {ex.Message}");
+            }
 
             Console.WriteLine("何かキーを押してください...");
             Console.ReadKey();
+        }
+
+        static List<Product> GetLowStockProducts()
+        {
+            var products = new List<Product>();
+
+            string query = @"
+                SELECT 
+                    id, barcode, name, current_stock, minimum_stock, supplier_id
+                FROM products 
+                WHERE current_stock <= minimum_stock
+                ORDER BY supplier_id, name";
+
+            using (var command = new SQLiteCommand(query, _connection))
+            using (var reader = command.ExecuteReader())
+            {
+                while (reader.Read())
+                {
+                    products.Add(new Product
+                    {
+                        Id = reader.GetInt32("id"),
+                        Barcode = reader.GetString("barcode"),
+                        Name = reader.GetString("name"),
+                        CurrentStock = reader.GetInt32("current_stock"),
+                        MinimumStock = reader.GetInt32("minimum_stock"),
+                        SupplierId = reader.IsDBNull("supplier_id") ? (int?)null : reader.GetInt32("supplier_id")
+                    });
+                }
+            }
+
+            return products;
+        }
+
+        static string CreateOrderPDF(Supplier supplier, List<Product> products)
+        {
+            // PDFディレクトリの作成
+            string pdfDir = "pdf";
+            if (!Directory.Exists(pdfDir))
+            {
+                Directory.CreateDirectory(pdfDir);
+            }
+
+            string fileName = $"order_{supplier.Id}_{DateTime.Now:yyyyMMdd_HHmmss}.pdf";
+            string pdfPath = Path.Combine(pdfDir, fileName);
+            string xpsPath = Path.Combine(pdfDir, $"temp_{supplier.Id}.xps");
+
+            try
+            {
+                // OrderSlipコントロールを作成
+                OrderSlip orderSlip = new OrderSlip();
+
+                // OrderSlipのデータコンテキストを設定（必要に応じて）
+                //orderSlip.DataContext = new OrderSlipViewModel
+                //{
+                //    Supplier = supplier,
+                //    Products = products,
+                //    OrderDate = DateTime.Now
+                //};
+
+                // FixedPageを作成
+                System.Windows.Documents.FixedPage fixedPage = new System.Windows.Documents.FixedPage();
+
+                // A4横サイズに設定
+                fixedPage.Width = 11.69 * 96;  // A4横幅 (792ポイント)
+                fixedPage.Height = 8.27 * 96;  // A4横高さ (612ポイント)
+
+                // OrderSlipをFixedPageに配置
+                System.Windows.Controls.Canvas.SetLeft(orderSlip, 0);
+                System.Windows.Controls.Canvas.SetTop(orderSlip, 0);
+                orderSlip.Width = fixedPage.Width;
+                orderSlip.Height = fixedPage.Height;
+
+                fixedPage.Children.Add(orderSlip);
+
+                // PageContentとFixedDocumentを作成
+                PageContent pageContent = new PageContent();
+                ((IAddChild)pageContent).AddChild(fixedPage);
+
+                FixedDocument fixedDocument = new FixedDocument();
+                fixedDocument.Pages.Add(pageContent);
+
+                // XPSファイルとして保存
+                using (Package package = Package.Open(xpsPath, FileMode.Create))
+                using (XpsDocument xpsDoc = new XpsDocument(package))
+                {
+                    XpsDocumentWriter writer = XpsDocument.CreateXpsDocumentWriter(xpsDoc);
+                    writer.Write(fixedDocument.DocumentPaginator);
+                }
+
+                // XPSをPDFに変換
+                //PdfSharp.Xps.XpsConverter.Convert(xpsPath, pdfPath, 0);
+
+                // 一時XPSファイルを削除
+                if (File.Exists(xpsPath))
+                {
+                    //File.Delete(xpsPath);
+                }
+
+                Console.WriteLine($"✓ XAML使用PDF作成完了: {pdfPath}");
+                return pdfPath;
+                //return CreateOrderPDFWithXaml(supplier, products, pdfPath, xpsPath);
+            }
+            catch (Exception xamlEx)
+            {
+                return xamlEx.Message;
+            }
         }
 
 
@@ -652,20 +829,6 @@ namespace InventoryManagement
                 command.Parameters.AddWithValue("@id", id);
                 command.ExecuteNonQuery();
             }
-        }
-
-        static void SendFax()
-        {
-            // FAX送信の実装（外部ライブラリまたはAPIを使用）
-            Console.WriteLine("FAX送信機能を呼び出しています...");
-            Console.WriteLine("FAX送信が完了しました。");
-        }
-
-        static void ProcessReceiving()
-        {
-            // 入荷処理の実装
-            Console.WriteLine("入荷処理を実行中...");
-            // 実際の入荷処理ロジックをここに実装
         }
     }
 
