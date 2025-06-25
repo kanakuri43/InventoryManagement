@@ -10,6 +10,6 @@ namespace InventoryManagement
     {
         public int Id { get; set; }
         public string Name { get; set; }
-        public string Contact { get; set; }
+        public string Fax { get; set; }
     }
 }

@@ -33,7 +33,7 @@ namespace InventoryManagement
                 CREATE TABLE IF NOT EXISTS suppliers (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     name TEXT NOT NULL,
-                    contact TEXT,
+                    fax TEXT,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 );
 
@@ -80,13 +80,13 @@ namespace InventoryManagement
         {
             int selectedIndex = 0;
             string[] menuItems = {
-                "1. 在庫入力",
-                "2. 商品管理",
-                "3. FAX送信",
-                "4. 入荷入力",
-                "5. 仕入先管理",
-                "6. データ出力",
-                "7. 終了"
+                "- 在庫入力",
+                "- FAX送信",
+                "- 入荷入力",
+                "- データ出力",
+                "- 商品管理",
+                "- 仕入先管理",
+                "- 終了"
             };
 
             while (true)
@@ -133,22 +133,28 @@ namespace InventoryManagement
             switch (option)
             {
                 case 0:
-                    StockInput();
+                    // 在庫数入力
+                    InputStock();
                     break;
                 case 1:
-                    ProductManagement();
-                    break;
-                case 2:
+                    // FAX送信
                     FaxSend();
                     break;
+                case 2:
+                    // 入荷入力
+                    InputReceiving();
+                    break;
                 case 3:
-                    ReceivingInput();
+                    // データ出力
+                    ExportAllTablesToCSV();
                     break;
                 case 4:
-                    SupplierManagement();
+                    // 商品管理
+                    ProductManagement();
                     break;
                 case 5:
-                    ExportAllTablesToCSV();
+                    // 仕入先管理
+                    SupplierManagement();
                     break;
                 case 6:
                     Console.WriteLine("アプリケーションを終了します...");
@@ -157,7 +163,7 @@ namespace InventoryManagement
             }
         }
 
-        static void StockInput()
+        static void InputStock()
         {
             while (true)
             {
@@ -207,6 +213,54 @@ namespace InventoryManagement
 
                 Console.WriteLine("何かキーを押してください...");
                 Console.ReadKey();
+            }
+        }
+
+        static void InputReceiving()
+        {
+            while (true)
+            {
+                Console.Clear();
+                Console.BackgroundColor = ConsoleColor.Yellow;
+                Console.ForegroundColor = ConsoleColor.Black;
+                Console.WriteLine("=== 入荷入力 ===\n");
+                Console.ResetColor();
+
+                Console.WriteLine("バーコードを入力してください（終了: 'x'）:");
+
+                string barcode = Console.ReadLine();
+                if (string.IsNullOrEmpty(barcode) || barcode.ToLower() == "x")
+                    break;
+
+                var product = GetProductByBarcode(barcode);
+                if (product == null)
+                {
+                    Console.WriteLine("商品が見つかりません。商品管理で登録してください。");
+                    Console.WriteLine("何かキーを押してください...");
+                    Console.ReadKey();
+                    continue;
+                }
+
+                Console.WriteLine("数量を入力してください:");
+                if (int.TryParse(Console.ReadLine(), out int quantity))
+                {
+                    Console.WriteLine($"在庫を更新します {quantity} 追加 (Y/N)");
+                    var confirm = Console.ReadKey(true);
+
+                    if (confirm.Key == ConsoleKey.Y)
+                    {
+                        UpdateStock(product.Id, (product.CurrentStock + quantity), "在庫入力");
+                        Console.WriteLine("在庫を更新しました。");
+                    }
+                    else
+                    {
+                        Console.WriteLine("キャンセルしました。");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("無効な数量です。");
+                }
             }
         }
 
@@ -278,30 +332,6 @@ namespace InventoryManagement
             Console.ReadKey();
         }
 
-        static void ReceivingInput()
-        {
-            Console.Clear();
-            Console.BackgroundColor = ConsoleColor.Yellow;
-            Console.ForegroundColor = ConsoleColor.Black;
-            Console.WriteLine("=== 入荷入力 ===\n");
-            Console.ResetColor();
-            Console.WriteLine("入荷処理を実行しますか？ (Y/N)");
-
-            var confirm = Console.ReadKey(true);
-            if (confirm.Key == ConsoleKey.Y)
-            {
-                // 入荷処理の実装
-                ProcessReceiving();
-                Console.WriteLine("入荷処理を実行しました。");
-            }
-            else
-            {
-                Console.WriteLine("キャンセルしました。");
-            }
-
-            Console.WriteLine("何かキーを押してください...");
-            Console.ReadKey();
-        }
 
         static void SupplierManagement()
         {
@@ -481,10 +511,21 @@ namespace InventoryManagement
         }
         static Product GetProductByBarcode(string barcode)
         {
-            string query = "SELECT id, barcode, name, current_stock, minimum_stock, supplier_id FROM products WHERE barcode = @barcode";
+            string query = $@"
+                SELECT 
+                    id
+                    , barcode
+                    , name
+                    , current_stock
+                    , minimum_stock
+                    , supplier_id 
+                FROM
+                    products 
+                WHERE
+                    barcode = '{barcode}'
+                ";
             using (var command = new SQLiteCommand(query, _connection))
             {
-                command.Parameters.AddWithValue("@barcode", barcode);
                 using (var reader = command.ExecuteReader())
                 {
                     if (reader.Read())
@@ -503,13 +544,17 @@ namespace InventoryManagement
             }
             return null;
         }
-
         static Supplier GetSupplierById(int suplierId)
         {
-            string query = "SELECT * FROM suppliers WHERE id = @id";
+            string query = $@"
+                SELECT *
+                FROM
+                    suppliers 
+                WHERE
+                    id = {suplierId}
+                ";
             using (var command = new SQLiteCommand(query, _connection))
             {
-                command.Parameters.AddWithValue("@id", suplierId);
                 using (var reader = command.ExecuteReader())
                 {
                     if (reader.Read())
@@ -518,7 +563,7 @@ namespace InventoryManagement
                         {
                             Id = reader.GetInt32("id"),
                             Name = reader.GetString("name"),
-                            Contact = reader.GetString("contact")
+                            Fax = reader.GetString("fax")
                         };
                     }
                 }
@@ -589,21 +634,21 @@ namespace InventoryManagement
 
         static void CreateSupplier(int id, string name, int fax)
         {
-            string query = "INSERT INTO suppliers (name, contact) VALUES (@name, @contact)";
+            string query = "INSERT INTO suppliers (name, fax) VALUES (@name, @fax)";
             using (var command = new SQLiteCommand(query, _connection))
             {
                 command.Parameters.AddWithValue("@name", name);
-                command.Parameters.AddWithValue("@contact", fax);
+                command.Parameters.AddWithValue("@fax", fax);
                 command.ExecuteNonQuery();
             }
         }
         static void UpdateSupplier(int id, string name, int fax)
         {
-            string query = "UPDATE suppliers SET name = @name, minimum_stock = @minimumStock WHERE id = @id";
+            string query = "UPDATE suppliers SET name = @name, fax = @fax WHERE id = @id";
             using (var command = new SQLiteCommand(query, _connection))
             {
                 command.Parameters.AddWithValue("@name", name);
-                command.Parameters.AddWithValue("@contact", fax);
+                command.Parameters.AddWithValue("@fax", fax);
                 command.Parameters.AddWithValue("@id", id);
                 command.ExecuteNonQuery();
             }
