@@ -11,13 +11,14 @@ using System.Windows.Xps.Packaging;
 using System.Windows.Controls;
 using PdfSharp.Pdf;
 using PdfSharp.Drawing;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace InventoryManagement
 {
     class Program
     {
-        private static SQLiteConnection _connection;
-        private const string dbPath = "inventory.db";
+        private static DatabaseManager _dbManager;
 
         [STAThread]
         static void Main(string[] args)
@@ -25,79 +26,12 @@ namespace InventoryManagement
             Console.OutputEncoding = System.Text.Encoding.UTF8;
             System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
 
-            InitializeDatabase();
+            _dbManager = new DatabaseManager();
+            _dbManager.Initialize();
+
             ShowMainMenu();
-        }
 
-        static void InitializeDatabase()
-        {
-            if (!File.Exists(dbPath))
-            {
-                SQLiteConnection.CreateFile(dbPath);
-            }
-
-            _connection = new SQLiteConnection($"Data Source={dbPath};Version=3;");
-            _connection.Open();
-
-            // テーブル作成
-            string createTables = @"
-                CREATE TABLE IF NOT EXISTS suppliers (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT NOT NULL,
-                    fax TEXT,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                );
-
-                CREATE TABLE IF NOT EXISTS products (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    barcode TEXT UNIQUE NOT NULL,
-                    name TEXT NOT NULL,
-                    current_stock INTEGER DEFAULT 0,
-                    minimum_stock INTEGER DEFAULT 0,
-                    supplier_id INTEGER,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (supplier_id) REFERENCES suppliers (id)
-                );
-
-                CREATE TABLE IF NOT EXISTS inventory_histories (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    product_id INTEGER NOT NULL,
-                    quantity INTEGER NOT NULL,
-                    operation_type TEXT NOT NULL,
-                    notes TEXT,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (product_id) REFERENCES products (id)
-                );
-
-                CREATE TABLE IF NOT EXISTS receiving_histories (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    product_id INTEGER NOT NULL,
-                    quantity_change INTEGER NOT NULL,
-                    supplier_id INTEGER,
-                    notes TEXT,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (product_id) REFERENCES products (id),
-                    FOREIGN KEY (supplier_id) REFERENCES suppliers (id)
-                );
-
-                CREATE TABLE IF NOT EXISTS order_histories (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    supplier_id INTEGER NOT NULL,
-                    product_id INTEGER NOT NULL,
-                    quantity INTEGER NOT NULL,
-                    status TEXT DEFAULT 'sent',
-                    pdf_path TEXT,
-                    notes TEXT,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (supplier_id) REFERENCES suppliers (id),
-                    FOREIGN KEY (product_id) REFERENCES products (id)
-                );            
-            ";
-
-            using (var command = new SQLiteCommand(createTables, _connection))
-            {
-                command.ExecuteNonQuery();
-            }
+            _dbManager.Close();
         }
 
         static void ShowMainMenu()
@@ -120,7 +54,6 @@ namespace InventoryManagement
                 Console.ForegroundColor = ConsoleColor.White;
                 Console.WriteLine("=== 在庫管理システム ===\n");
                 Console.ResetColor();
-
 
                 for (int i = 0; i < menuItems.Length; i++)
                 {
@@ -158,32 +91,25 @@ namespace InventoryManagement
             switch (option)
             {
                 case 0:
-                    // 在庫数入力
                     InputInventory();
                     break;
                 case 1:
-                    // FAX送信
                     SendFax();
                     break;
                 case 2:
-                    // 入荷入力
                     InputReceiving();
                     break;
                 case 3:
-                    // データ出力
                     ExportAllTablesToCSV();
                     break;
                 case 4:
-                    // 商品管理
                     ProductManagement();
                     break;
                 case 5:
-                    // 仕入先管理
                     SupplierManagement();
                     break;
                 case 6:
                     Console.WriteLine("アプリケーションを終了します...");
-                    _connection?.Close();
                     break;
             }
         }
@@ -203,7 +129,7 @@ namespace InventoryManagement
                 if (string.IsNullOrEmpty(barcode) || barcode.ToLower() == "x")
                     break;
 
-                var product = GetProductByBarcode(barcode);
+                var product = _dbManager.GetProductByBarcode(barcode);
                 if (product == null)
                 {
                     Console.WriteLine("商品が見つかりません。商品管理で登録してください。");
@@ -223,9 +149,8 @@ namespace InventoryManagement
 
                     if (confirm.Key == ConsoleKey.Y)
                     {
-                        UpdateStock(product.Id, quantity, "在庫入力");
-                        // 履歴記録
-                        CreateInventoryHistories(product.Id, quantity, "");
+                        _dbManager.UpdateStock(product.Id, quantity);
+                        _dbManager.CreateInventoryHistory(product.Id, quantity, "在庫入力");
 
                         Console.WriteLine("在庫を更新しました。");
                     }
@@ -260,7 +185,7 @@ namespace InventoryManagement
                 if (string.IsNullOrEmpty(barcode) || barcode.ToLower() == "x")
                     break;
 
-                var product = GetProductByBarcode(barcode);
+                var product = _dbManager.GetProductByBarcode(barcode);
                 if (product == null)
                 {
                     Console.WriteLine("商品が見つかりません。商品管理で登録してください。");
@@ -277,9 +202,8 @@ namespace InventoryManagement
 
                     if (confirm.Key == ConsoleKey.Y)
                     {
-                        UpdateStock(product.Id, (product.CurrentStock + quantity), "在庫入力");
-                        // 履歴記録
-                        CreateReceivingHistories(product.Id, quantity, "");
+                        _dbManager.UpdateStock(product.Id, (product.CurrentStock + quantity));
+                        _dbManager.CreateReceivingHistory(product.Id, quantity);
 
                         Console.WriteLine("在庫を更新しました。");
                     }
@@ -310,7 +234,7 @@ namespace InventoryManagement
                 if (string.IsNullOrEmpty(barcode) || barcode.ToLower() == "x")
                     break;
 
-                var product = GetProductByBarcode(barcode);
+                var product = _dbManager.GetProductByBarcode(barcode);
 
                 Console.WriteLine("商品名を入力してください:");
                 string name = Console.ReadLine();
@@ -329,12 +253,12 @@ namespace InventoryManagement
                 {
                     if (product == null)
                     {
-                        CreateProduct(barcode, name, minStock, 1);
+                        _dbManager.CreateProduct(barcode, name, minStock, 1);
                         Console.WriteLine("商品を新規登録しました。");
                     }
                     else
                     {
-                        UpdateProduct(product.Id, name, minStock);
+                        _dbManager.UpdateProduct(product.Id, name, minStock);
                         Console.WriteLine("商品情報を更新しました。");
                     }
                 }
@@ -358,8 +282,7 @@ namespace InventoryManagement
 
             try
             {
-                // 最低在庫数を下回った商品を取得
-                var lowStockProducts = GetLowStockProducts();
+                var lowStockProducts = _dbManager.GetLowStockProducts();
 
                 if (lowStockProducts.Count == 0)
                 {
@@ -368,11 +291,12 @@ namespace InventoryManagement
                     Console.ReadKey();
                     return;
                 }
+
                 Console.WriteLine($"発注が必要な商品が {lowStockProducts.Count} 件見つかりました。");
                 Console.WriteLine("\n発注対象商品:");
                 foreach (var product in lowStockProducts)
                 {
-                    var supplier = GetSupplierById(product.SupplierId ?? 0);
+                    var supplier = _dbManager.GetSupplierById(product.SupplierId ?? 0);
                     string supplierName = supplier?.Name ?? "未設定";
                     Console.WriteLine($"- {product.Name} (現在:{product.CurrentStock}, 最低:{product.MinimumStock}) - 仕入先: {supplierName}");
                 }
@@ -388,7 +312,6 @@ namespace InventoryManagement
                     return;
                 }
 
-                // 仕入先ごとにグループ化して発注書を作成
                 var supplierGroups = lowStockProducts
                     .Where(p => p.SupplierId.HasValue)
                     .GroupBy(p => p.SupplierId.Value)
@@ -399,15 +322,14 @@ namespace InventoryManagement
 
                 foreach (var group in supplierGroups)
                 {
-                    var supplier = GetSupplierById(group.Key);
+                    var supplier = _dbManager.GetSupplierById(group.Key);
                     if (supplier == null) continue;
 
                     try
                     {
-                        // PDF発注書作成
                         string pdfPath = CreateOrderPDF(supplier, group.ToList());
-                        // 発注履歴を記録
-                        CreateOrderHistories(supplier.Id, group.ToList(), pdfPath, "自動発注");
+                        _dbManager.CreateOrderHistories(supplier.Id, group.ToList(), pdfPath, "自動発注");
+                        successCount++;
                     }
                     catch (Exception ex)
                     {
@@ -426,86 +348,8 @@ namespace InventoryManagement
             Console.ReadKey();
         }
 
-        static void CreateOrderHistories(int supplierId, List<Product> products, string pdfPath, string notes = null)
-        {
-            using (var transaction = _connection.BeginTransaction())
-            {
-                try
-                {
-                    foreach (var product in products)
-                    {
-                        // 発注数量を計算（最低在庫数の2倍 - 現在在庫数）
-                        int orderQuantity = Math.Max(0, (product.MinimumStock * 2) - product.CurrentStock);
-
-                        string query = @"
-                            INSERT INTO order_histories (
-                                supplier_id, 
-                                product_id, 
-                                quantity, 
-                                pdf_path, 
-                                notes
-                            ) VALUES (
-                                @supplierId, 
-                                @productId, 
-                                @orderQuantity, 
-                                @pdfPath, 
-                                @notes
-                            )";
-
-                        using (var command = new SQLiteCommand(query, _connection, transaction))
-                        {
-                            command.Parameters.AddWithValue("@supplierId", supplierId);
-                            command.Parameters.AddWithValue("@productId", product.Id);
-                            command.Parameters.AddWithValue("@orderQuantity", orderQuantity);
-                            command.Parameters.AddWithValue("@pdfPath", pdfPath ?? "");
-                            command.Parameters.AddWithValue("@notes", notes ?? "");
-                            command.ExecuteNonQuery();
-                        }
-                    }
-
-                    transaction.Commit();
-                }
-                catch
-                {
-                    transaction.Rollback();
-                    throw;
-                }
-            }
-        }
-        static List<Product> GetLowStockProducts()
-        {
-            var products = new List<Product>();
-
-            string query = @"
-                SELECT 
-                    id, barcode, name, current_stock, minimum_stock, supplier_id
-                FROM products 
-                WHERE current_stock <= minimum_stock
-                ORDER BY supplier_id, name";
-
-            using (var command = new SQLiteCommand(query, _connection))
-            using (var reader = command.ExecuteReader())
-            {
-                while (reader.Read())
-                {
-                    products.Add(new Product
-                    {
-                        Id = reader.GetInt32("id"),
-                        Barcode = reader.GetString("barcode"),
-                        Name = reader.GetString("name"),
-                        CurrentStock = reader.GetInt32("current_stock"),
-                        MinimumStock = reader.GetInt32("minimum_stock"),
-                        SupplierId = reader.IsDBNull("supplier_id") ? (int?)null : reader.GetInt32("supplier_id")
-                    });
-                }
-            }
-
-            return products;
-        }
-
         static string CreateOrderPDF(Supplier supplier, List<Product> products)
         {
-            // PDFディレクトリの作成
             string pdfDir = "pdf";
             if (!Directory.Exists(pdfDir))
             {
@@ -518,24 +362,18 @@ namespace InventoryManagement
 
             try
             {
-                // OrderSlipコントロールを作成
                 OrderSlip orderSlip = new OrderSlip();
 
-                // OrderSlipのデータコンテキストを設定（必要に応じて）
                 orderSlip.DataContext = new OrderSlipViewModel
                 {
                     Supplier = supplier,
                     OrderDate = DateTime.Now
                 };
 
-                // FixedPageを作成
                 System.Windows.Documents.FixedPage fixedPage = new System.Windows.Documents.FixedPage();
+                fixedPage.Width = 11.69 * 96;
+                fixedPage.Height = 8.27 * 96;
 
-                // A4横サイズに設定
-                fixedPage.Width = 11.69 * 96;  // A4横幅 (792ポイント)
-                fixedPage.Height = 8.27 * 96;  // A4横高さ (612ポイント)
-
-                // OrderSlipをFixedPageに配置
                 System.Windows.Controls.Canvas.SetLeft(orderSlip, 0);
                 System.Windows.Controls.Canvas.SetTop(orderSlip, 0);
                 orderSlip.Width = fixedPage.Width;
@@ -543,14 +381,12 @@ namespace InventoryManagement
 
                 fixedPage.Children.Add(orderSlip);
 
-                // PageContentとFixedDocumentを作成
                 PageContent pageContent = new PageContent();
                 ((IAddChild)pageContent).AddChild(fixedPage);
 
                 FixedDocument fixedDocument = new FixedDocument();
                 fixedDocument.Pages.Add(pageContent);
 
-                // XPSファイルとして保存
                 using (Package package = Package.Open(xpsPath, FileMode.Create))
                 using (XpsDocument xpsDoc = new XpsDocument(package))
                 {
@@ -558,25 +394,21 @@ namespace InventoryManagement
                     writer.Write(fixedDocument.DocumentPaginator);
                 }
 
-                // XPSをPDFに変換
                 PdfSharp.Xps.XpsConverter.Convert(xpsPath, pdfPath, 0);
 
-                // 一時XPSファイルを削除
                 if (File.Exists(xpsPath))
                 {
                     File.Delete(xpsPath);
                 }
 
-                Console.WriteLine($"✓ XAML使用PDF作成完了: {pdfPath}");
+                Console.WriteLine($"✓ PDF作成完了: {pdfPath}");
                 return pdfPath;
-                //return CreateOrderPDFWithXaml(supplier, products, pdfPath, xpsPath);
             }
-            catch (Exception xamlEx)
+            catch (Exception ex)
             {
-                return xamlEx.Message;
+                return ex.Message;
             }
         }
-
 
         static void SupplierManagement()
         {
@@ -599,8 +431,7 @@ namespace InventoryManagement
                     continue;
                 }
 
-
-                var suplier = GetSupplierById(supplierId);
+                var supplier = _dbManager.GetSupplierById(supplierId);
 
                 Console.WriteLine("仕入先名を入力してください:");
                 string supplierName = Console.ReadLine();
@@ -617,15 +448,15 @@ namespace InventoryManagement
 
                 if (confirm.Key == ConsoleKey.Y)
                 {
-                    if (suplier == null)
+                    if (supplier == null)
                     {
-                        CreateSupplier(supplierId, supplierName, fax);
-                        Console.WriteLine("商品を新規登録しました。");
+                        _dbManager.CreateSupplier(supplierName, fax);
+                        Console.WriteLine("仕入先を新規登録しました。");
                     }
                     else
                     {
-                        UpdateSupplier(suplier.Id, supplierName, fax);
-                        Console.WriteLine("商品情報を更新しました。");
+                        _dbManager.UpdateSupplier(supplier.Id, supplierName, fax);
+                        Console.WriteLine("仕入先情報を更新しました。");
                     }
                 }
                 else
@@ -642,15 +473,13 @@ namespace InventoryManagement
         {
             try
             {
-                // 出力ディレクトリを作成
                 string outputDir = "csv_exports";
                 if (!Directory.Exists(outputDir))
                 {
                     Directory.CreateDirectory(outputDir);
                 }
 
-                // 全テーブル名を取得
-                List<string> tableNames = GetAllTableNames();
+                List<string> tableNames = _dbManager.GetAllTableNames();
 
                 if (tableNames.Count == 0)
                 {
@@ -686,35 +515,13 @@ namespace InventoryManagement
             }
         }
 
-        static List<string> GetAllTableNames()
-        {
-            List<string> tableNames = new List<string>();
-
-            string sql = @"
-            SELECT name FROM sqlite_master 
-            WHERE type='table' 
-            AND name NOT LIKE 'sqlite_%'
-            ORDER BY name";
-
-            using (SQLiteCommand command = new SQLiteCommand(sql, _connection))
-            using (SQLiteDataReader reader = command.ExecuteReader())
-            {
-                while (reader.Read())
-                {
-                    tableNames.Add(reader["name"].ToString());
-                }
-            }
-
-            return tableNames;
-        }
         static void ExportTableToCSV(string tableName, string csvFilePath)
         {
             using (StreamWriter writer = new StreamWriter(csvFilePath, false, Encoding.UTF8))
             {
                 string sql = $"SELECT * FROM [{tableName}]";
 
-                using (SQLiteCommand command = new SQLiteCommand(sql, _connection))
-                using (SQLiteDataReader reader = command.ExecuteReader())
+                using (SQLiteDataReader reader = _dbManager.ExecuteReader(sql))
                 {
                     // ヘッダー行を書き込み
                     List<string> columnNames = new List<string>();
@@ -739,229 +546,19 @@ namespace InventoryManagement
                 }
             }
         }
+
         static string EscapeCsvField(string field)
         {
             if (string.IsNullOrEmpty(field))
                 return "";
 
-            // カンマ、改行、ダブルクォートが含まれている場合はダブルクォートで囲む
             if (field.Contains(",") || field.Contains("\n") || field.Contains("\r") || field.Contains("\""))
             {
-                // ダブルクォートをエスケープ（""に変換）
                 field = field.Replace("\"", "\"\"");
                 return $"\"{field}\"";
             }
 
             return field;
         }
-        static Product GetProductByBarcode(string barcode)
-        {
-            string query = $@"
-                SELECT 
-                    id
-                    , barcode
-                    , name
-                    , current_stock
-                    , minimum_stock
-                    , supplier_id 
-                FROM
-                    products 
-                WHERE
-                    barcode = '{barcode}'
-                ";
-            using (var command = new SQLiteCommand(query, _connection))
-            {
-                using (var reader = command.ExecuteReader())
-                {
-                    if (reader.Read())
-                    {
-                        return new Product
-                        {
-                            Id = reader.GetInt32("id"),
-                            Barcode = reader.GetString("barcode"),
-                            Name = reader.GetString("name"),
-                            CurrentStock = reader.GetInt32("current_stock"),
-                            MinimumStock = reader.GetInt32("minimum_stock"),
-                            SupplierId = reader.IsDBNull("supplier_id") ? (int?)null : reader.GetInt32("supplier_id")
-                        };
-                    }
-                }
-            }
-            return null;
-        }
-        static Supplier GetSupplierById(int suplierId)
-        {
-            string query = $@"
-                SELECT *
-                FROM
-                    suppliers 
-                WHERE
-                    id = {suplierId}
-                ";
-            using (var command = new SQLiteCommand(query, _connection))
-            {
-                using (var reader = command.ExecuteReader())
-                {
-                    if (reader.Read())
-                    {
-                        return new Supplier
-                        {
-                            Id = reader.GetInt32("id"),
-                            Name = reader.GetString("name"),
-                            Fax = reader.GetString("fax")
-                        };
-                    }
-                }
-            }
-            return null;
-        }
-
-        static void UpdateStock(int productId, int quantity, string operationType)
-        {
-            using (var transaction = _connection.BeginTransaction())
-            {
-                try
-                {
-                    // 在庫数更新
-                    string updateStock = "UPDATE products SET current_stock = @quantity WHERE id = @id";
-                    using (var command = new SQLiteCommand(updateStock, _connection, transaction))
-                    {
-                        command.Parameters.AddWithValue("@quantity", quantity);
-                        command.Parameters.AddWithValue("@id", productId);
-                        command.ExecuteNonQuery();
-                    }
-                    transaction.Commit();
-
-                }
-                catch
-                {
-                    transaction.Rollback();
-                    throw;
-                }
-            }
-        }
-
-        static void CreateInventoryHistories(int productId, int quantityChange, string operationType)
-        {
-            using (var transaction = _connection.BeginTransaction())
-            {
-                try
-                {
-                    string query = $@"
-                        INSERT INTO
-                            inventory_histories (
-                                product_id
-                                , quantity
-                                , operation_type
-                        ) VALUES (
-                            {productId}
-                            , {quantityChange}
-                            , '{operationType}'
-                        )
-                    ";
-                    using (var command = new SQLiteCommand(query, _connection, transaction))
-                    {
-                        command.ExecuteNonQuery();
-                    }
-
-                    transaction.Commit();
-                }
-                catch
-                {
-                    transaction.Rollback();
-                    throw;
-                }
-            }
-        }
-        static void CreateReceivingHistories(int productId, int quantityChange, string operationType)
-        {
-            using (var transaction = _connection.BeginTransaction())
-            {
-                try
-                {
-                    string query = $@"
-                        INSERT INTO
-                            receiving_histories (
-                                product_id
-                                , quantity_change
-                                , supplier_id
-                        ) VALUES (
-                            {productId}
-                            , {quantityChange}
-                            , 1
-                        )
-                    ";
-                    using (var command = new SQLiteCommand(query, _connection, transaction))
-                    {
-                        command.ExecuteNonQuery();
-                    }
-
-                    transaction.Commit();
-                }
-                catch
-                {
-                    transaction.Rollback();
-                    throw;
-                }
-            }
-        }
-
-        static void CreateProduct(string barcode, string name, int minimumStock, int supplierId)
-        {
-            string query = $@"
-                INSERT INTO products (
-                    barcode
-                    , name
-                    , minimum_stock
-                    , supplier_id
-                ) VALUES (
-                    {barcode}
-                    , '{name}'
-                    , {minimumStock}
-                    , {supplierId}
-                )
-            ";
-            using (var command = new SQLiteCommand(query, _connection))
-            {
-                command.ExecuteNonQuery();
-            }
-        }
-
-        static void UpdateProduct(int id, string name, int minimumStock)
-        {
-            string query = "UPDATE products SET name = @name, minimum_stock = @minimumStock WHERE id = @id";
-            using (var command = new SQLiteCommand(query, _connection))
-            {
-                command.Parameters.AddWithValue("@name", name);
-                command.Parameters.AddWithValue("@minimumStock", minimumStock);
-                command.Parameters.AddWithValue("@id", id);
-                command.ExecuteNonQuery();
-            }
-        }
-
-        static void CreateSupplier(int id, string name, int fax)
-        {
-            string query = "INSERT INTO suppliers (name, fax) VALUES (@name, @fax)";
-            using (var command = new SQLiteCommand(query, _connection))
-            {
-                command.Parameters.AddWithValue("@name", name);
-                command.Parameters.AddWithValue("@fax", fax);
-                command.ExecuteNonQuery();
-            }
-        }
-        static void UpdateSupplier(int id, string name, int fax)
-        {
-            string query = "UPDATE suppliers SET name = @name, fax = @fax WHERE id = @id";
-            using (var command = new SQLiteCommand(query, _connection))
-            {
-                command.Parameters.AddWithValue("@name", name);
-                command.Parameters.AddWithValue("@fax", fax);
-                command.Parameters.AddWithValue("@id", id);
-                command.ExecuteNonQuery();
-            }
-        }
     }
-
-
-
 }
