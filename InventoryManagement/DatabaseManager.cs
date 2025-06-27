@@ -83,6 +83,15 @@ namespace InventoryManagement
                     FOREIGN KEY (supplier_id) REFERENCES suppliers (id),
                     FOREIGN KEY (product_id) REFERENCES products (id)
                 );            
+
+                CREATE TABLE IF NOT EXISTS company_info (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    address TEXT,
+                    tel TEXT,
+                    fax TEXT
+                );
+
             ";
 
             using (var command = new SQLiteCommand(createTables, _connection))

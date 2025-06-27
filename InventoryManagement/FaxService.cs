@@ -122,8 +122,11 @@ namespace InventoryManagement
 
                 orderSlip.DataContext = new OrderSlipViewModel
                 {
+                    Title = "発注書",
                     Supplier = supplier,
-                    OrderDate = DateTime.Now
+                    OrderDate = DateTime.Now,
+                    CompanyName = "COYPP",
+
                 };
 
                 System.Windows.Documents.FixedPage fixedPage = new System.Windows.Documents.FixedPage();

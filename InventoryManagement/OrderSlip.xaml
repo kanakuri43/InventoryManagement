@@ -10,23 +10,49 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="50"/>
             <RowDefinition Height="50"/>
-            <RowDefinition Height="50"/>
-            <RowDefinition Height="50"/>
-            <RowDefinition Height="50"/>
-            <RowDefinition Height="50"/>
-            <RowDefinition/>
+            <RowDefinition Height="200"/>
             <RowDefinition/>
         </Grid.RowDefinitions>
         <TextBlock Grid.Row="0" 
-                   Text="発注書"/>
-
-        <StackPanel Grid.Row="2" Orientation="Horizontal">
-            <TextBlock Text="{Binding Supplier.Name}"/>
-            <TextBlock Text=" 御中"/>
-        </StackPanel>
-        <StackPanel Grid.Row="3" Orientation="Horizontal">
+                   HorizontalAlignment="Center"
+                   Text="{Binding Title}"/>
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center">
             <TextBlock Text="発注日 "/>
             <TextBlock Text="{Binding OrderDate}"/>
         </StackPanel>
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition />
+                <ColumnDefinition Width="400"/>
+            </Grid.ColumnDefinitions>
+
+            <Grid Grid.Column="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="50"/>
+                    <RowDefinition Height="50"/>
+                    <RowDefinition Height="50"/>
+                    <RowDefinition/>
+                </Grid.RowDefinitions>
+
+                <StackPanel Grid.Row="0" Orientation="Horizontal">
+                    <TextBlock Text="{Binding Supplier.Name}"/>
+                    <TextBlock Text=" 御中"/>
+                </StackPanel>
+
+            </Grid>
+            <Grid Grid.Column="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="50"/>
+                    <RowDefinition Height="50"/>
+                    <RowDefinition Height="50"/>
+                    <RowDefinition/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" 
+                           Text="{Binding CompanyName}"/>
+
+            </Grid>
+
+        </Grid>
     </Grid>
 </UserControl>
