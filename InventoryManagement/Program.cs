@@ -59,7 +59,7 @@ namespace InventoryManagement
                     FOREIGN KEY (supplier_id) REFERENCES suppliers (id)
                 );
 
-                CREATE TABLE IF NOT EXISTS stock_histories (
+                CREATE TABLE IF NOT EXISTS inventory_histories (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     product_id INTEGER NOT NULL,
                     quantity_change INTEGER NOT NULL,
@@ -159,7 +159,7 @@ namespace InventoryManagement
             {
                 case 0:
                     // 在庫数入力
-                    InputStock();
+                    InputInventory();
                     break;
                 case 1:
                     // FAX送信
@@ -188,7 +188,7 @@ namespace InventoryManagement
             }
         }
 
-        static void InputStock()
+        static void InputInventory()
         {
             while (true)
             {
@@ -432,19 +432,19 @@ namespace InventoryManagement
                         int orderQuantity = Math.Max(0, (product.MinimumStock * 2) - product.CurrentStock);
 
                         string query = @"
-                    INSERT INTO order_histories (
-                        supplier_id, 
-                        product_id, 
-                        order_quantity, 
-                        pdf_path, 
-                        notes
-                    ) VALUES (
-                        @supplierId, 
-                        @productId, 
-                        @orderQuantity, 
-                        @pdfPath, 
-                        @notes
-                    )";
+                            INSERT INTO order_histories (
+                                supplier_id, 
+                                product_id, 
+                                order_quantity, 
+                                pdf_path, 
+                                notes
+                            ) VALUES (
+                                @supplierId, 
+                                @productId, 
+                                @orderQuantity, 
+                                @pdfPath, 
+                                @notes
+                            )";
 
                         using (var command = new SQLiteCommand(query, _connection, transaction))
                         {
@@ -826,9 +826,42 @@ namespace InventoryManagement
                     }
 
                     // 履歴記録
-                    string insertHistory = $@"
+                    //string insertHistory = $@"
+                    //    INSERT INTO
+                    //        inventory_histories (
+                    //            product_id
+                    //            , quantity_change
+                    //            , operation_type
+                    //    ) VALUES (
+                    //        {productId}
+                    //        , {quantityChange}
+                    //        , '{operationType}'
+                    //    )
+                    //";
+                    //using (var command = new SQLiteCommand(insertHistory, _connection, transaction))
+                    //{
+                    //    command.ExecuteNonQuery();
+                    //}
+                    CreateInventoryHistories(productId, quantityChange, "");
+                    transaction.Commit();
+                }
+                catch
+                {
+                    transaction.Rollback();
+                    throw;
+                }
+            }
+        }
+
+        static void CreateInventoryHistories(int productId, int quantityChange, string operationType)
+        {
+            using (var transaction = _connection.BeginTransaction())
+            {
+                try
+                {
+                    string query = $@"
                         INSERT INTO
-                            stock_histories (
+                            inventory_histories (
                                 product_id
                                 , quantity_change
                                 , operation_type
@@ -837,10 +870,56 @@ namespace InventoryManagement
                             , {quantityChange}
                             , '{operationType}'
                         )
-                        ";
-                    using (var command = new SQLiteCommand(insertHistory, _connection, transaction))
+                    ";
+                    using (var command = new SQLiteCommand(query, _connection, transaction))
                     {
                         command.ExecuteNonQuery();
+                    }
+
+                    transaction.Commit();
+                }
+                catch
+                {
+                    transaction.Rollback();
+                    throw;
+                }
+            }
+        }
+        static void CreateReceivingHistories(int supplierId, List<Product> products, string pdfPath, string notes = null)
+        {
+            using (var transaction = _connection.BeginTransaction())
+            {
+                try
+                {
+                    foreach (var product in products)
+                    {
+                        // 発注数量を計算（最低在庫数の2倍 - 現在在庫数）
+                        int orderQuantity = Math.Max(0, (product.MinimumStock * 2) - product.CurrentStock);
+
+                        string query = @"
+                            INSERT INTO order_histories (
+                                supplier_id, 
+                                product_id, 
+                                order_quantity, 
+                                pdf_path, 
+                                notes
+                            ) VALUES (
+                                @supplierId, 
+                                @productId, 
+                                @orderQuantity, 
+                                @pdfPath, 
+                                @notes
+                            )";
+
+                        using (var command = new SQLiteCommand(query, _connection, transaction))
+                        {
+                            command.Parameters.AddWithValue("@supplierId", supplierId);
+                            command.Parameters.AddWithValue("@productId", product.Id);
+                            command.Parameters.AddWithValue("@orderQuantity", orderQuantity);
+                            command.Parameters.AddWithValue("@pdfPath", pdfPath ?? "");
+                            command.Parameters.AddWithValue("@notes", notes ?? "");
+                            command.ExecuteNonQuery();
+                        }
                     }
 
                     transaction.Commit();
