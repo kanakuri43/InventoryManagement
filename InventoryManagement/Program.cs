@@ -62,7 +62,7 @@ namespace InventoryManagement
                 CREATE TABLE IF NOT EXISTS inventory_histories (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     product_id INTEGER NOT NULL,
-                    quantity_change INTEGER NOT NULL,
+                    quantity INTEGER NOT NULL,
                     operation_type TEXT NOT NULL,
                     notes TEXT,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -72,7 +72,7 @@ namespace InventoryManagement
                 CREATE TABLE IF NOT EXISTS receiving_histories (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     product_id INTEGER NOT NULL,
-                    quantity INTEGER NOT NULL,
+                    quantity_change INTEGER NOT NULL,
                     supplier_id INTEGER,
                     notes TEXT,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -84,7 +84,7 @@ namespace InventoryManagement
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     supplier_id INTEGER NOT NULL,
                     product_id INTEGER NOT NULL,
-                    order_quantity INTEGER NOT NULL,
+                    quantity INTEGER NOT NULL,
                     status TEXT DEFAULT 'sent',
                     pdf_path TEXT,
                     notes TEXT,
@@ -116,8 +116,8 @@ namespace InventoryManagement
             while (true)
             {
                 Console.Clear();
-                Console.BackgroundColor = ConsoleColor.Yellow;
-                Console.ForegroundColor = ConsoleColor.Black;
+                Console.BackgroundColor = ConsoleColor.Blue;
+                Console.ForegroundColor = ConsoleColor.White;
                 Console.WriteLine("=== 在庫管理システム ===\n");
                 Console.ResetColor();
 
@@ -193,8 +193,8 @@ namespace InventoryManagement
             while (true)
             {
                 Console.Clear();
-                Console.BackgroundColor = ConsoleColor.Yellow;
-                Console.ForegroundColor = ConsoleColor.Black;
+                Console.BackgroundColor = ConsoleColor.Blue;
+                Console.ForegroundColor = ConsoleColor.White;
                 Console.WriteLine("=== 在庫入力 ===\n");
                 Console.ResetColor();
                 Console.WriteLine("バーコードを入力してください（x: 戻る）:");
@@ -224,6 +224,9 @@ namespace InventoryManagement
                     if (confirm.Key == ConsoleKey.Y)
                     {
                         UpdateStock(product.Id, quantity, "在庫入力");
+                        // 履歴記録
+                        CreateInventoryHistories(product.Id, quantity, "");
+
                         Console.WriteLine("在庫を更新しました。");
                     }
                     else
@@ -246,8 +249,8 @@ namespace InventoryManagement
             while (true)
             {
                 Console.Clear();
-                Console.BackgroundColor = ConsoleColor.Yellow;
-                Console.ForegroundColor = ConsoleColor.Black;
+                Console.BackgroundColor = ConsoleColor.Blue;
+                Console.ForegroundColor = ConsoleColor.White;
                 Console.WriteLine("=== 入荷入力 ===\n");
                 Console.ResetColor();
 
@@ -275,6 +278,9 @@ namespace InventoryManagement
                     if (confirm.Key == ConsoleKey.Y)
                     {
                         UpdateStock(product.Id, (product.CurrentStock + quantity), "在庫入力");
+                        // 履歴記録
+                        CreateReceivingHistories(product.Id, quantity, "");
+
                         Console.WriteLine("在庫を更新しました。");
                     }
                     else
@@ -294,8 +300,8 @@ namespace InventoryManagement
             while (true)
             {
                 Console.Clear();
-                Console.BackgroundColor = ConsoleColor.Yellow;
-                Console.ForegroundColor = ConsoleColor.Black;
+                Console.BackgroundColor = ConsoleColor.Blue;
+                Console.ForegroundColor = ConsoleColor.White;
                 Console.WriteLine("=== 商品管理 ===\n");
                 Console.ResetColor();
                 Console.WriteLine("バーコードを入力してください（x: 戻る）:");
@@ -323,7 +329,7 @@ namespace InventoryManagement
                 {
                     if (product == null)
                     {
-                        CreateProduct(barcode, name, minStock);
+                        CreateProduct(barcode, name, minStock, 1);
                         Console.WriteLine("商品を新規登録しました。");
                     }
                     else
@@ -345,8 +351,8 @@ namespace InventoryManagement
         static void SendFax()
         {
             Console.Clear();
-            Console.BackgroundColor = ConsoleColor.Yellow;
-            Console.ForegroundColor = ConsoleColor.Black;
+            Console.BackgroundColor = ConsoleColor.Blue;
+            Console.ForegroundColor = ConsoleColor.White;
             Console.WriteLine("=== FAX送信 ===\n");
             Console.ResetColor();
 
@@ -435,7 +441,7 @@ namespace InventoryManagement
                             INSERT INTO order_histories (
                                 supplier_id, 
                                 product_id, 
-                                order_quantity, 
+                                quantity, 
                                 pdf_path, 
                                 notes
                             ) VALUES (
@@ -577,8 +583,8 @@ namespace InventoryManagement
             while (true)
             {
                 Console.Clear();
-                Console.BackgroundColor = ConsoleColor.Yellow;
-                Console.ForegroundColor = ConsoleColor.Black;
+                Console.BackgroundColor = ConsoleColor.Blue;
+                Console.ForegroundColor = ConsoleColor.White;
                 Console.WriteLine("=== 仕入先管理 ===\n");
                 Console.ResetColor();
                 Console.WriteLine("仕入先コードを入力してください（x: 戻る）:");
@@ -826,8 +832,6 @@ namespace InventoryManagement
                     }
                     transaction.Commit();
 
-                    // 履歴記録
-                    CreateInventoryHistories(productId, quantity, "");
                 }
                 catch
                 {
@@ -847,7 +851,7 @@ namespace InventoryManagement
                         INSERT INTO
                             inventory_histories (
                                 product_id
-                                , quantity_change
+                                , quantity
                                 , operation_type
                         ) VALUES (
                             {productId}
@@ -869,41 +873,27 @@ namespace InventoryManagement
                 }
             }
         }
-        static void CreateReceivingHistories(int supplierId, List<Product> products, string pdfPath, string notes = null)
+        static void CreateReceivingHistories(int productId, int quantityChange, string operationType)
         {
             using (var transaction = _connection.BeginTransaction())
             {
                 try
                 {
-                    foreach (var product in products)
+                    string query = $@"
+                        INSERT INTO
+                            receiving_histories (
+                                product_id
+                                , quantity_change
+                                , supplier_id
+                        ) VALUES (
+                            {productId}
+                            , {quantityChange}
+                            , 1
+                        )
+                    ";
+                    using (var command = new SQLiteCommand(query, _connection, transaction))
                     {
-                        // 発注数量を計算（最低在庫数の2倍 - 現在在庫数）
-                        int orderQuantity = Math.Max(0, (product.MinimumStock * 2) - product.CurrentStock);
-
-                        string query = @"
-                            INSERT INTO order_histories (
-                                supplier_id, 
-                                product_id, 
-                                order_quantity, 
-                                pdf_path, 
-                                notes
-                            ) VALUES (
-                                @supplierId, 
-                                @productId, 
-                                @orderQuantity, 
-                                @pdfPath, 
-                                @notes
-                            )";
-
-                        using (var command = new SQLiteCommand(query, _connection, transaction))
-                        {
-                            command.Parameters.AddWithValue("@supplierId", supplierId);
-                            command.Parameters.AddWithValue("@productId", product.Id);
-                            command.Parameters.AddWithValue("@orderQuantity", orderQuantity);
-                            command.Parameters.AddWithValue("@pdfPath", pdfPath ?? "");
-                            command.Parameters.AddWithValue("@notes", notes ?? "");
-                            command.ExecuteNonQuery();
-                        }
+                        command.ExecuteNonQuery();
                     }
 
                     transaction.Commit();
@@ -916,15 +906,23 @@ namespace InventoryManagement
             }
         }
 
-        static void CreateProduct(string barcode, string name, int minimumStock)
+        static void CreateProduct(string barcode, string name, int minimumStock, int supplierId)
         {
-            string query = @"INSERT INTO products (barcode, name, minimum_stock) 
-                           VALUES (@barcode, @name, @minimumStock)";
+            string query = $@"
+                INSERT INTO products (
+                    barcode
+                    , name
+                    , minimum_stock
+                    , supplier_id
+                ) VALUES (
+                    {barcode}
+                    , '{name}'
+                    , {minimumStock}
+                    , {supplierId}
+                )
+            ";
             using (var command = new SQLiteCommand(query, _connection))
             {
-                command.Parameters.AddWithValue("@barcode", barcode);
-                command.Parameters.AddWithValue("@name", name);
-                command.Parameters.AddWithValue("@minimumStock", minimumStock);
                 command.ExecuteNonQuery();
             }
         }
