@@ -59,7 +59,7 @@ namespace InventoryManagement
                     FOREIGN KEY (supplier_id) REFERENCES suppliers (id)
                 );
 
-                CREATE TABLE IF NOT EXISTS stock_history (
+                CREATE TABLE IF NOT EXISTS stock_histories (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     product_id INTEGER NOT NULL,
                     quantity_change INTEGER NOT NULL,
@@ -69,7 +69,7 @@ namespace InventoryManagement
                     FOREIGN KEY (product_id) REFERENCES products (id)
                 );
 
-                CREATE TABLE IF NOT EXISTS receiving_history (
+                CREATE TABLE IF NOT EXISTS receiving_histories (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     product_id INTEGER NOT NULL,
                     quantity INTEGER NOT NULL,
@@ -79,6 +79,19 @@ namespace InventoryManagement
                     FOREIGN KEY (product_id) REFERENCES products (id),
                     FOREIGN KEY (supplier_id) REFERENCES suppliers (id)
                 );
+
+                CREATE TABLE IF NOT EXISTS order_histories (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    supplier_id INTEGER NOT NULL,
+                    product_id INTEGER NOT NULL,
+                    order_quantity INTEGER NOT NULL,
+                    status TEXT DEFAULT 'sent',
+                    pdf_path TEXT,
+                    notes TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (supplier_id) REFERENCES suppliers (id),
+                    FOREIGN KEY (product_id) REFERENCES products (id)
+                );            
             ";
 
             using (var command = new SQLiteCommand(createTables, _connection))
@@ -387,7 +400,8 @@ namespace InventoryManagement
                     {
                         // PDF発注書作成
                         string pdfPath = CreateOrderPDF(supplier, group.ToList());
-
+                        // 発注履歴を記録
+                        CreateOrderHistories(supplier.Id, group.ToList(), pdfPath, "自動発注");
                     }
                     catch (Exception ex)
                     {
@@ -406,6 +420,52 @@ namespace InventoryManagement
             Console.ReadKey();
         }
 
+        static void CreateOrderHistories(int supplierId, List<Product> products, string pdfPath, string notes = null)
+        {
+            using (var transaction = _connection.BeginTransaction())
+            {
+                try
+                {
+                    foreach (var product in products)
+                    {
+                        // 発注数量を計算（最低在庫数の2倍 - 現在在庫数）
+                        int orderQuantity = Math.Max(0, (product.MinimumStock * 2) - product.CurrentStock);
+
+                        string query = @"
+                    INSERT INTO order_histories (
+                        supplier_id, 
+                        product_id, 
+                        order_quantity, 
+                        pdf_path, 
+                        notes
+                    ) VALUES (
+                        @supplierId, 
+                        @productId, 
+                        @orderQuantity, 
+                        @pdfPath, 
+                        @notes
+                    )";
+
+                        using (var command = new SQLiteCommand(query, _connection, transaction))
+                        {
+                            command.Parameters.AddWithValue("@supplierId", supplierId);
+                            command.Parameters.AddWithValue("@productId", product.Id);
+                            command.Parameters.AddWithValue("@orderQuantity", orderQuantity);
+                            command.Parameters.AddWithValue("@pdfPath", pdfPath ?? "");
+                            command.Parameters.AddWithValue("@notes", notes ?? "");
+                            command.ExecuteNonQuery();
+                        }
+                    }
+
+                    transaction.Commit();
+                }
+                catch
+                {
+                    transaction.Rollback();
+                    throw;
+                }
+            }
+        }
         static List<Product> GetLowStockProducts()
         {
             var products = new List<Product>();
@@ -766,13 +826,20 @@ namespace InventoryManagement
                     }
 
                     // 履歴記録
-                    string insertHistory = @"INSERT INTO stock_history (product_id, quantity_change, operation_type) 
-                                           VALUES (@productId, @quantity, @operation)";
+                    string insertHistory = $@"
+                        INSERT INTO
+                            stock_histories (
+                                product_id
+                                , quantity_change
+                                , operation_type
+                        ) VALUES (
+                            {productId}
+                            , {quantityChange}
+                            , '{operationType}'
+                        )
+                        ";
                     using (var command = new SQLiteCommand(insertHistory, _connection, transaction))
                     {
-                        command.Parameters.AddWithValue("@productId", productId);
-                        command.Parameters.AddWithValue("@quantity", quantityChange);
-                        command.Parameters.AddWithValue("@operation", operationType);
                         command.ExecuteNonQuery();
                     }
 
