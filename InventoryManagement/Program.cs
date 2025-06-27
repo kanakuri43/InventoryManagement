@@ -810,7 +810,7 @@ namespace InventoryManagement
             return null;
         }
 
-        static void UpdateStock(int productId, int quantityChange, string operationType)
+        static void UpdateStock(int productId, int quantity, string operationType)
         {
             using (var transaction = _connection.BeginTransaction())
             {
@@ -820,30 +820,14 @@ namespace InventoryManagement
                     string updateStock = "UPDATE products SET current_stock = @quantity WHERE id = @id";
                     using (var command = new SQLiteCommand(updateStock, _connection, transaction))
                     {
-                        command.Parameters.AddWithValue("@quantity", quantityChange);
+                        command.Parameters.AddWithValue("@quantity", quantity);
                         command.Parameters.AddWithValue("@id", productId);
                         command.ExecuteNonQuery();
                     }
+                    transaction.Commit();
 
                     // 履歴記録
-                    //string insertHistory = $@"
-                    //    INSERT INTO
-                    //        inventory_histories (
-                    //            product_id
-                    //            , quantity_change
-                    //            , operation_type
-                    //    ) VALUES (
-                    //        {productId}
-                    //        , {quantityChange}
-                    //        , '{operationType}'
-                    //    )
-                    //";
-                    //using (var command = new SQLiteCommand(insertHistory, _connection, transaction))
-                    //{
-                    //    command.ExecuteNonQuery();
-                    //}
-                    CreateInventoryHistories(productId, quantityChange, "");
-                    transaction.Commit();
+                    CreateInventoryHistories(productId, quantity, "");
                 }
                 catch
                 {
