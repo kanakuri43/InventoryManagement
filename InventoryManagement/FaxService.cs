@@ -126,7 +126,9 @@ namespace InventoryManagement
                     Supplier = supplier,
                     OrderDate = DateTime.Now,
                     CompanyName = "COYPP",
-
+                    CompanyAddress = "山形市流通センター１－９－２",
+                    CompanyTel = "023-633-3331",
+                    CompanyFax = "023-633-3331",
                 };
 
                 System.Windows.Documents.FixedPage fixedPage = new System.Windows.Documents.FixedPage();

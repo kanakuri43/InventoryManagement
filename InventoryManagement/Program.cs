@@ -73,7 +73,7 @@ namespace InventoryManagement
                     Console.ResetColor();
                 }
 
-                Console.WriteLine("\n上下キーで選択、Enterで決定");
+                //Console.WriteLine("\n上下キーで選択、Enterで決定");
 
                 ConsoleKeyInfo keyInfo = Console.ReadKey(true);
 

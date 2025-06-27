@@ -6,7 +6,7 @@
              xmlns:local="clr-namespace:InventoryManagement"
              mc:Ignorable="d" 
              d:DesignHeight="800" d:DesignWidth="1100">
-    <Grid Background="White">
+    <Grid Background="White" Margin="10">
         <Grid.RowDefinitions>
             <RowDefinition Height="50"/>
             <RowDefinition Height="50"/>
@@ -40,18 +40,13 @@
                 </StackPanel>
 
             </Grid>
-            <Grid Grid.Column="1">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="50"/>
-                    <RowDefinition Height="50"/>
-                    <RowDefinition Height="50"/>
-                    <RowDefinition/>
-                </Grid.RowDefinitions>
+            <StackPanel Grid.Column="1">
+                <TextBlock Text="{Binding CompanyName}"/>
+                <TextBlock Text="{Binding CompanyAddress}"/>
+                <TextBlock Text="{Binding CompanyTel}"/>
+                <TextBlock Text="{Binding CompanyFax}"/>
 
-                <TextBlock Grid.Row="0" 
-                           Text="{Binding CompanyName}"/>
-
-            </Grid>
+            </StackPanel>
 
         </Grid>
     </Grid>
